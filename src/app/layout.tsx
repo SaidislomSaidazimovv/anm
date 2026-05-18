@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Space_Grotesk, DM_Sans } from 'next/font/google'
 import './globals.css'
 
@@ -17,8 +17,19 @@ const dmSans = DM_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'SPIRAL — Creative Studio',
-  description: 'A creative studio at the intersection of design and technology.',
+  title: 'SPIRAL — Interstellar Creative Studio',
+  description:
+    'A creative studio engineering experiences across the digital cosmos. An interactive journey through the solar system.',
+  keywords: ['creative studio', '3D web', 'WebGL', 'solar system', 'interactive', 'awwwards'],
+  openGraph: {
+    title: 'SPIRAL — Interstellar Creative Studio',
+    description: 'A creative studio engineering experiences across the digital cosmos.',
+    type: 'website',
+  },
+}
+
+export const viewport: Viewport = {
+  themeColor: '#02020a',
 }
 
 export default function RootLayout({

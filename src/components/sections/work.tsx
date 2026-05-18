@@ -13,7 +13,7 @@ const projects = [
 export function Work() {
   return (
     <section id="work" className="relative py-28 md:py-36 px-6 md:px-12 lg:px-24">
-      <SectionHeading index="01" label="Portfolio" title="Selected Work" />
+      <SectionHeading index="02" label="Missions" title="Selected work" />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
         {projects.map((project, i) => (

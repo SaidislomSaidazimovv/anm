@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react'
 
 const links = [
-  { label: 'About', href: '#hero' },
+  { label: 'About', href: '#about' },
   { label: 'Work', href: '#work' },
   { label: 'Services', href: '#services' },
+  { label: 'Process', href: '#process' },
   { label: 'Contact', href: '#contact' },
 ]
 
@@ -21,8 +22,12 @@ export function Navbar() {
 
   const handleClick = (href: string) => {
     setMenuOpen(false)
-    const el = document.querySelector(href)
-    el?.scrollIntoView({ behavior: 'smooth' })
+    const lenis = typeof window !== 'undefined' ? window.__lenis : undefined
+    if (lenis) {
+      lenis.scrollTo(href, { offset: -80 })
+    } else {
+      document.querySelector(href)?.scrollIntoView({ behavior: 'smooth' })
+    }
   }
 
   return (
@@ -37,15 +42,20 @@ export function Navbar() {
       <div className="flex items-center justify-between px-6 md:px-12 lg:px-24 h-16">
         {/* Logo */}
         <a href="#hero" onClick={() => handleClick('#hero')} className="flex items-center gap-3">
-          {/* Simple spiral SVG icon */}
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="opacity-80">
-            <path
-              d="M10 2a8 8 0 0 1 8 8 6 6 0 0 1-6 6 4 4 0 0 1-4-4 2 2 0 0 1 2-2"
+          {/* Orbital mark — matches the favicon */}
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" className="opacity-90">
+            <ellipse
+              cx="11"
+              cy="11"
+              rx="9.5"
+              ry="3.8"
+              transform="rotate(-28 11 11)"
               stroke="white"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              fill="none"
+              strokeWidth="1.2"
+              opacity="0.55"
             />
+            <circle cx="11" cy="11" r="3.6" fill="white" />
+            <circle cx="19" cy="5" r="1.3" fill="white" />
           </svg>
           <span className="font-heading font-light text-sm tracking-[0.3em] uppercase" style={{ color: 'var(--text-primary)' }}>
             Spiral

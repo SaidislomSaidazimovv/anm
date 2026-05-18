@@ -1,15 +1,37 @@
 'use client'
 
+import { Suspense, useEffect, useMemo } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { SpiralField } from './spiral-field'
+import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing'
+import * as THREE from 'three'
+import { SolarSystem } from './solar-system'
 import { useScrollProgress } from './use-scroll-progress'
+import { useSectionAnchors } from './use-section-anchors'
 
-/**
- * Fixed, full-viewport WebGL layer that sits behind all page content.
- * The whole-page scroll drives a 3D spiral the user travels through.
- */
-export function Scene() {
+const SECTION_IDS = ['hero', 'about', 'work', 'services', 'process', 'stats', 'contact']
+
+export function Scene({ onReady }: { onReady?: () => void }) {
   const progress = useScrollProgress()
+  const ids = useMemo(() => SECTION_IDS, [])
+  const anchors = useSectionAnchors(ids)
+
+  // Report readiness via the shared loading manager (no setState
+  // during render — avoids the React "update while rendering" error).
+  useEffect(() => {
+    const mgr = THREE.DefaultLoadingManager
+    const prev = mgr.onLoad
+    let done = false
+    mgr.onLoad = () => {
+      if (!done) {
+        done = true
+        onReady?.()
+      }
+      prev?.()
+    }
+    return () => {
+      mgr.onLoad = prev
+    }
+  }, [onReady])
 
   return (
     <div
@@ -17,12 +39,24 @@ export function Scene() {
       style={{ background: 'var(--bg)' }}
     >
       <Canvas
-        camera={{ position: [0, 0, 9], fov: 70, near: 0.1, far: 200 }}
+        camera={{ position: [0, 6, 46], fov: 68, near: 0.1, far: 1200 }}
         dpr={[1, 1.75]}
         gl={{ antialias: true, alpha: true }}
       >
-        <fog attach="fog" args={['#000000', 18, 70]} />
-        <SpiralField progress={progress} />
+        <color attach="background" args={['#02020a']} />
+        <fog attach="fog" args={['#02020a', 140, 460]} />
+        <Suspense fallback={null}>
+          <SolarSystem progress={progress} anchors={anchors} />
+        </Suspense>
+        <EffectComposer>
+          <Bloom
+            intensity={1.1}
+            luminanceThreshold={0.6}
+            luminanceSmoothing={0.4}
+            mipmapBlur
+          />
+          <Vignette eskil={false} offset={0.25} darkness={0.82} />
+        </EffectComposer>
       </Canvas>
     </div>
   )

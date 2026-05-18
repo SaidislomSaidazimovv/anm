@@ -72,7 +72,7 @@ export function Hero() {
             className="font-body font-light text-lg md:text-xl mt-10 max-w-xl leading-relaxed"
             style={{ color: 'var(--text-secondary)' }}
           >
-            A creative studio at the intersection of design and technology.
+            A creative studio engineering experiences across the digital cosmos.
           </p>
         </SectionReveal>
 

@@ -14,7 +14,7 @@ const services: { num: string; title: string; desc: string; icon: LucideIcon }[]
 export function Services() {
   return (
     <section id="services" className="relative py-28 md:py-36 px-6 md:px-12 lg:px-24">
-      <SectionHeading index="02" label="Capabilities" title="What We Do" />
+      <SectionHeading index="03" label="Capabilities" title="What we do" />
 
       <div
         className="grid grid-cols-1 md:grid-cols-2"

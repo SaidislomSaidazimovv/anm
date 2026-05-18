@@ -30,14 +30,14 @@ export function Contact() {
             className="font-body text-xs tracking-[0.3em] uppercase block mb-8"
             style={{ color: 'var(--text-secondary)' }}
           >
-            03 — Get in touch
+            06 — Open a channel
           </span>
         </SectionReveal>
 
         <SectionReveal delay={0.1}>
           <h2 className="font-heading font-light text-5xl md:text-7xl lg:text-8xl leading-[1.12] tracking-tight max-w-4xl">
             <span className="block">Let&apos;s build something</span>
-            <span className="block">remarkable.</span>
+            <span className="block">that escapes orbit.</span>
           </h2>
         </SectionReveal>
 

@@ -25,9 +25,17 @@
    rely on preflight instead. */
 
 html {
-  scroll-behavior: smooth;
-  /* keep section titles clear of the fixed 64px navbar on anchor jumps */
+  /* Lenis owns scrolling now — native smooth-behavior would fight it */
   scroll-padding-top: 5.5rem;
+}
+
+/* Custom cursor takes over on precise pointers */
+@media (pointer: fine) {
+  body,
+  a,
+  button {
+    cursor: none;
+  }
 }
 
 section[id] {
@@ -153,6 +161,45 @@ body {
     opacity: 1;
     letter-spacing: 0.62em;
   }
+}
+
+/* ── 3D planet HUD label ── */
+.cosmo-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  user-select: none;
+  transform: translateY(-50%);
+  animation: fade-in-up 0.6s ease-out both;
+}
+
+.cosmo-label__name {
+  font-family: var(--font-heading);
+  font-weight: 300;
+  font-size: 13px;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: #fff;
+  padding-left: 0.35em;
+}
+
+.cosmo-label__tag {
+  font-family: var(--font-body);
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  padding-left: 0.3em;
+}
+
+.cosmo-label::after {
+  content: "";
+  width: 1px;
+  height: 26px;
+  margin-top: 6px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.5), transparent);
 }
 
 /* ── Utility classes ── */
