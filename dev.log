@@ -1,0 +1,10 @@
+▲ Next.js 16.2.1 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.100.8:3000
+✓ Ready in 1306ms
+
+○ Compiling / ...
+ GET / 200 in 6.9s (next.js: 5.7s, application-code: 1238ms)
+ GET / 200 in 6.9s (next.js: 6.3s, application-code: 556ms)
+ GET / 200 in 144ms (next.js: 15ms, application-code: 129ms)
+[browser] THREE.Clock: This module has been deprecated. Please use THREE.Timer instead. (file://F:/Main and Private/Animations/Anm1/spiral-site/.next/dev/static/chunks/node_modules_next_dist_115brz8._.js:2431:13)

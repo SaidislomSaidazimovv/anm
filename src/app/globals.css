@@ -15,17 +15,23 @@
   --font-body: var(--font-dm-sans), "DM Sans", sans-serif;
 }
 
-/* ── Reset ── */
-*,
-*::before,
-*::after {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+/* NOTE: no manual universal reset here.
+   Tailwind v4's preflight already applies
+   `box-sizing:border-box; margin:0; padding:0; border:0 solid`
+   to every element *inside @layer base*, so utilities still win.
+   A custom unlayered `* { margin:0; padding:0 }` would outrank every
+   Tailwind spacing utility (unlayered CSS beats layered) and collapse
+   all spacing — Turbopack dev strips a wrapping @layer, so we just
+   rely on preflight instead. */
 
 html {
   scroll-behavior: smooth;
+  /* keep section titles clear of the fixed 64px navbar on anchor jumps */
+  scroll-padding-top: 5.5rem;
+}
+
+section[id] {
+  scroll-margin-top: 5.5rem;
 }
 
 html,
@@ -137,9 +143,40 @@ body {
   }
 }
 
+@keyframes enter-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+    letter-spacing: 0.5em;
+  }
+  50% {
+    opacity: 1;
+    letter-spacing: 0.62em;
+  }
+}
+
 /* ── Utility classes ── */
 .animate-marquee {
   animation: marquee 30s linear infinite;
+}
+
+.animate-enter-breathe {
+  animation: enter-breathe 3.2s ease-in-out infinite;
+}
+
+@keyframes site-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-site-in {
+  animation: site-in 1s ease-out both;
 }
 
 .animate-gradient {

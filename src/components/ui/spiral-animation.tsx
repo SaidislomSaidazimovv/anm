@@ -41,7 +41,6 @@ class AnimationController {
         this.timeline = gsap.timeline({ repeat: -1 })
 
         this.setupRandomGenerator()
-        this.createStars()
         this.setupTimeline()
     }
 

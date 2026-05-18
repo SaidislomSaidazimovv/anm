@@ -7,6 +7,12 @@ import { Work } from '@/components/sections/work'
 import { Services } from '@/components/sections/services'
 import { Contact } from '@/components/sections/contact'
 import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
+
+const Scene = dynamic(
+  () => import('@/components/three/scene').then((m) => m.Scene),
+  { ssr: false }
+)
 
 export default function Home() {
   const [showSite, setShowSite] = useState(false)
@@ -21,7 +27,7 @@ export default function Home() {
   }, [])
 
   return (
-    <div className="bg-black min-h-screen w-full">
+    <div className="bg-black min-h-screen w-full relative">
 
       {/* Entry overlay — fades out automatically */}
       <div
@@ -36,33 +42,42 @@ export default function Home() {
           <SpiralAnimation />
         </div>
 
-        {/* ENTER text — centered, decorative only, not clickable */}
-        <div className="absolute inset-0 z-10 flex items-center justify-center">
-          <p
-            className="text-white text-sm tracking-[0.5em] uppercase font-light select-none transition-opacity duration-[2000ms]"
-            style={{ opacity: enterVisible ? 1 : 0 }}
+        {/* ENTER text — slightly below center, breathing animation, decorative only */}
+        <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+          <div
+            className="transition-all duration-[1800ms] ease-out"
+            style={{
+              opacity: enterVisible ? 1 : 0,
+              transform: enterVisible
+                ? 'translateY(160px)'
+                : 'translateY(180px)',
+            }}
           >
-            ENTER
-          </p>
+            <p className="animate-enter-breathe text-white text-sm tracking-[0.5em] uppercase font-light select-none">
+              ENTER
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Main site — fades in after spiral fades out */}
-      <div
-        className="transition-all duration-1000 ease-out"
-        style={{
-          opacity: showSite ? 1 : 0,
-          transform: showSite ? 'translateY(0px)' : 'translateY(24px)'
-        }}
-      >
-        <Navbar />
-        <main>
-          <Hero />
-          <Work />
-          <Services />
-          <Contact />
-        </main>
-      </div>
+      {/* Main site — mounted only after the intro ends so each section's
+          entrance animation plays in sync instead of behind the overlay */}
+      {showSite && (
+        <>
+          {/* Fixed 3D layer behind everything */}
+          <Scene />
+
+          <div className="animate-site-in relative z-10">
+            <Navbar />
+            <main>
+              <Hero />
+              <Work />
+              <Services />
+              <Contact />
+            </main>
+          </div>
+        </>
+      )}
 
     </div>
   )
