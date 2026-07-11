@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Space_Grotesk, DM_Sans } from 'next/font/google'
+import { SITE_URL } from '@/lib/site'
 import './globals.css'
 
 const spaceGrotesk = Space_Grotesk({
@@ -17,14 +18,27 @@ const dmSans = DM_Sans({
 })
 
 export const metadata: Metadata = {
+  // Resolves the generated OG/Twitter images to absolute URLs — social
+  // crawlers won't follow a relative one.
+  metadataBase: new URL(SITE_URL),
   title: 'SPIRAL — Interstellar Creative Studio',
   description:
     'A creative studio engineering experiences across the digital cosmos. An interactive journey through the solar system.',
   keywords: ['creative studio', '3D web', 'WebGL', 'solar system', 'interactive', 'awwwards'],
+  alternates: {
+    canonical: '/',
+  },
   openGraph: {
     title: 'SPIRAL — Interstellar Creative Studio',
     description: 'A creative studio engineering experiences across the digital cosmos.',
+    url: '/',
+    siteName: 'SPIRAL',
     type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'SPIRAL — Interstellar Creative Studio',
+    description: 'A creative studio engineering experiences across the digital cosmos.',
   },
 }
 

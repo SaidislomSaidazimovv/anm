@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { scrollToSection } from '@/lib/scroll-to'
 
 const links = [
   { label: 'About', href: '#about' },
@@ -22,12 +23,7 @@ export function Navbar() {
 
   const handleClick = (href: string) => {
     setMenuOpen(false)
-    const lenis = typeof window !== 'undefined' ? window.__lenis : undefined
-    if (lenis) {
-      lenis.scrollTo(href, { offset: -80 })
-    } else {
-      document.querySelector(href)?.scrollIntoView({ behavior: 'smooth' })
-    }
+    scrollToSection(href)
   }
 
   return (
@@ -41,21 +37,29 @@ export function Navbar() {
     >
       <div className="flex items-center justify-between px-6 md:px-12 lg:px-24 h-16">
         {/* Logo */}
-        <a href="#hero" onClick={() => handleClick('#hero')} className="flex items-center gap-3">
-          {/* Orbital mark — matches the favicon */}
-          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" className="opacity-90">
-            <ellipse
-              cx="11"
-              cy="11"
-              rx="9.5"
-              ry="3.8"
-              transform="rotate(-28 11 11)"
+        <a
+          href="#hero"
+          onClick={(e) => {
+            e.preventDefault() // let Lenis own the scroll; the native jump fights it
+            handleClick('#hero')
+          }}
+          className="flex items-center gap-3"
+        >
+          {/* Gargantua mark — same geometry as the favicon (src/app/icon.svg),
+              monochrome here so it sits inside the site's black-and-white palette */}
+          <svg width="24" height="24" viewBox="0 0 32 32" fill="none" className="shrink-0">
+            <circle cx="16" cy="16" r="9" fill="none" stroke="white" strokeWidth="1.8" opacity="0.75" />
+            <ellipse cx="16" cy="16.4" rx="14" ry="2.7" fill="none" stroke="white" strokeWidth="1.8" opacity="0.75" />
+            {/* event horizon — punches out the middle of the ring and the disk's far side */}
+            <circle cx="16" cy="16" r="6.3" fill="#000000" />
+            {/* near side of the disk crosses in front of the hole */}
+            <path
+              d="M2 16.4 A14 2.7 0 0 0 30 16.4"
+              fill="none"
               stroke="white"
-              strokeWidth="1.2"
-              opacity="0.55"
+              strokeWidth="1.8"
+              strokeLinecap="round"
             />
-            <circle cx="11" cy="11" r="3.6" fill="white" />
-            <circle cx="19" cy="5" r="1.3" fill="white" />
           </svg>
           <span className="font-heading font-light text-sm tracking-[0.3em] uppercase" style={{ color: 'var(--text-primary)' }}>
             Spiral
