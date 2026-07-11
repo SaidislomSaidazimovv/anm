@@ -11,55 +11,24 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { Stars, useTexture, Html, Billboard } from '@react-three/drei'
 import * as THREE from 'three'
 import type { Anchors } from './use-section-anchors'
+import { Sun } from './sun'
+import { Atmosphere } from './atmosphere'
+import {
+  applyDayNight,
+  applyPlanetShadowOnRing,
+  applyRingShadowOnPlanet,
+  type RingShadowUniforms,
+  type SunUniforms,
+} from './materials'
+import type { Quality } from './quality'
+import { ALL_BODIES, BODIES, SUN, type Anchor, type Body } from './bodies'
+import { PlanetPicker, type PlanetPositions } from './planet-picker'
 
 /* ── The journey ──────────────────────────────────────────────
    Every body is parked on the flight curve at the scroll fraction
    of the section it belongs to (or between two of them), so each
-   planet "arrives" exactly as its section scrolls into view. */
-
-type Anchor =
-  | { section: string }
-  | { between: [string, string]; t: number }
-  | { fixed: number }
-
-type Body = {
-  key: string
-  tex: string
-  radius: number
-  tilt: number
-  spin: number
-  clouds?: boolean
-  ring?: 'saturn' | 'thin'
-  moon?: boolean
-  anchor: Anchor
-  offset: [number, number, number]
-  name: string
-  tag: string
-}
-
-const SUN: Body = {
-  key: 'sun', tex: '/textures/2k_sun.jpg', radius: 6, tilt: 0, spin: 0.02,
-  anchor: { section: 'hero' }, offset: [-13, 2, -20], name: 'Sol', tag: 'Departure',
-}
-
-const BODIES: Body[] = [
-  { key: 'mercury', tex: '/textures/2k_mercury.jpg', radius: 1.3, tilt: 0.01, spin: 0.05,
-    anchor: { section: 'about' }, offset: [11, 2, -7], name: 'Mercury', tag: 'Origin' },
-  { key: 'venus', tex: '/textures/2k_venus_atmosphere.jpg', radius: 2.4, tilt: 0.05, spin: -0.03,
-    anchor: { between: ['about', 'work'], t: 0.5 }, offset: [-12, 3, -6], name: 'Venus', tag: 'Transit' },
-  { key: 'earth', tex: '/textures/2k_earth_daymap.jpg', radius: 2.6, tilt: 0.41, spin: 0.12,
-    clouds: true, moon: true, anchor: { section: 'work' }, offset: [12, -2, -7], name: 'Earth', tag: 'Home base' },
-  { key: 'mars', tex: '/textures/2k_mars.jpg', radius: 1.9, tilt: 0.44, spin: 0.11,
-    anchor: { between: ['work', 'services'], t: 0.4 }, offset: [-11, -3, -6], name: 'Mars', tag: 'Transit' },
-  { key: 'jupiter', tex: '/textures/2k_jupiter.jpg', radius: 5.4, tilt: 0.05, spin: 0.24,
-    anchor: { section: 'services' }, offset: [14, 4, -9], name: 'Jupiter', tag: 'Scale' },
-  { key: 'saturn', tex: '/textures/2k_saturn.jpg', radius: 4.4, tilt: 0.47, spin: 0.2, ring: 'saturn',
-    anchor: { section: 'process' }, offset: [-14, -3, -8], name: 'Saturn', tag: 'Process' },
-  { key: 'uranus', tex: '/textures/2k_uranus.jpg', radius: 3.2, tilt: 1.71, spin: 0.16, ring: 'thin',
-    anchor: { section: 'stats' }, offset: [13, 3, -7], name: 'Uranus', tag: 'Trajectory' },
-  { key: 'neptune', tex: '/textures/2k_neptune.jpg', radius: 3.0, tilt: 0.49, spin: 0.16,
-    anchor: { section: 'contact' }, offset: [12, -2, -7], name: 'Neptune', tag: 'Transmit' },
-]
+   planet "arrives" exactly as its section scrolls into view.
+   The cast itself lives in ./bodies. */
 
 // Belt lives in the clear gap between Mars (t≈0.4) and Jupiter
 // (t=1.0), so it never intersects a planet.
@@ -76,63 +45,175 @@ function fracOf(a: Anchor, anchors: Anchors): number {
 function useColorTexture(url: string) {
   const tex = useTexture(url) as THREE.Texture
   useLayoutEffect(() => {
+    // A three.js texture is a mutable GPU resource, not React state — the
+    // immutability lint doesn't know the difference.
+    /* eslint-disable react-hooks/immutability */
     tex.colorSpace = THREE.SRGBColorSpace
     tex.anisotropy = 8
     tex.needsUpdate = true
+    /* eslint-enable react-hooks/immutability */
   }, [tex])
   return tex
 }
 
-/* ── Soft camera-facing star glow (stable, no backside flicker) ── */
-function useGlowTexture() {
-  return useMemo(() => {
-    const s = 256
-    const c = document.createElement('canvas')
-    c.width = c.height = s
-    const ctx = c.getContext('2d')!
-    const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2)
-    g.addColorStop(0.0, 'rgba(255,247,225,0.95)')
-    g.addColorStop(0.18, 'rgba(255,180,90,0.55)')
-    g.addColorStop(0.45, 'rgba(255,130,45,0.22)')
-    g.addColorStop(0.75, 'rgba(255,110,40,0.06)')
-    g.addColorStop(1.0, 'rgba(255,110,40,0)')
-    ctx.fillStyle = g
-    ctx.fillRect(0, 0, s, s)
-    const t = new THREE.CanvasTexture(c)
-    t.colorSpace = THREE.SRGBColorSpace
-    return t
-  }, [])
+/** Non-colour maps (normal, roughness) must stay linear, not sRGB. */
+function useDataTexture(url: string) {
+  const tex = useTexture(url) as THREE.Texture
+  useLayoutEffect(() => {
+    /* eslint-disable react-hooks/immutability */
+    tex.colorSpace = THREE.NoColorSpace
+    tex.anisotropy = 8
+    tex.needsUpdate = true
+    /* eslint-enable react-hooks/immutability */
+  }, [tex])
+  return tex
 }
 
-function SunGlow({ radius }: { radius: number }) {
-  const tex = useGlowTexture()
-  const s = radius * 4.2
+/**
+ * Ocean gloss. The source is a specular map — white where light bounces — but
+ * `roughnessMap` wants the opposite, so we flip it once at load time.
+ */
+function useOceanRoughness(url: string) {
+  const src = useDataTexture(url)
+  return useMemo(() => {
+    const img = src.image as HTMLImageElement | undefined
+    if (!img?.width) return null
+    const c = document.createElement('canvas')
+    c.width = img.width
+    c.height = img.height
+    const ctx = c.getContext('2d')!
+    ctx.filter = 'invert(1)'
+    ctx.drawImage(img, 0, 0)
+    const t = new THREE.CanvasTexture(c)
+    t.colorSpace = THREE.NoColorSpace
+    t.anisotropy = 8
+    return t
+  }, [src])
+}
+
+/** Deterministic PRNG so the belt is identical on every render and on the
+ *  server — `Math.random()` during render is both impure and unstable. */
+function mulberry32(seed: number) {
+  return () => {
+    seed |= 0
+    seed = (seed + 0x6d2b79f5) | 0
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/* ── Surfaces ────────────────────────────────────────────────── */
+
+/** Rock and gas: colour map, plus bump relief where the world is airless. */
+function BasicSurface({
+  data,
+  ringU,
+  segments,
+}: {
+  data: Body
+  ringU: RingShadowUniforms
+  segments: number
+}) {
+  const map = useColorTexture(data.tex)
+
+  const material = useMemo(() => {
+    const m = new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 })
+    if (data.bump) {
+      m.bumpMap = map
+      m.bumpScale = data.bump
+    }
+    if (data.ring === 'saturn') applyRingShadowOnPlanet(m, ringU)
+    return m
+  }, [map, data.bump, data.ring, ringU])
+
   return (
-    <sprite scale={[s, s, 1]} frustumCulled={false}>
-      <spriteMaterial
-        map={tex}
-        transparent
-        depthWrite={false}
-        blending={THREE.AdditiveBlending}
-        opacity={0.85}
-      />
-    </sprite>
+    <mesh material={material}>
+      <sphereGeometry args={[data.radius, segments, segments]} />
+    </mesh>
   )
 }
 
-/* ── Generic ring with radial-strip UVs ── */
-function Ring({
-  inner,
-  outer,
-  texture,
-  opacity = 0.95,
-}: {
-  inner: number
-  outer: number
-  texture: THREE.Texture
-  opacity?: number
+/**
+ * Earth, with the four maps that separate a globe from a marble: elevation
+ * (normal), ocean gloss (inverted specular), city lights on the night side,
+ * and a cloud shell turning slightly faster than the ground.
+ */
+function EarthSurface({ data, cloudsRef, sunU, segments }: {
+  data: Body
+  cloudsRef: RefObject<THREE.Mesh | null>
+  sunU: SunUniforms
+  segments: number
 }) {
-  const geom = useMemo(() => {
+  const map = useColorTexture(data.tex)
+  const normal = useDataTexture('/textures/earth_normal_2048.webp')
+  const lights = useColorTexture('/textures/earth_lights_2048.webp')
+  const cloudMap = useColorTexture('/textures/2k_earth_clouds.webp')
+  const oceanRough = useOceanRoughness('/textures/earth_specular_1024.webp')
+
+  const material = useMemo(() => {
+    const m = new THREE.MeshStandardMaterial({
+      map,
+      normalMap: normal,
+      normalScale: new THREE.Vector2(0.85, 0.85),
+      roughness: 1,
+      metalness: 0.06,
+      emissiveMap: lights,
+      emissive: new THREE.Color('#ffcf87'),
+      emissiveIntensity: 1.5,
+    })
+    if (oceanRough) m.roughnessMap = oceanRough
+    applyDayNight(m, sunU)
+    return m
+  }, [map, normal, lights, oceanRough, sunU])
+
+  return (
+    <>
+      <mesh material={material}>
+        <sphereGeometry args={[data.radius, segments, segments]} />
+      </mesh>
+      <mesh ref={cloudsRef}>
+        <sphereGeometry args={[data.radius * 1.012, segments, segments]} />
+        <meshStandardMaterial
+          alphaMap={cloudMap}
+          color="#ffffff"
+          transparent
+          opacity={0.9}
+          depthWrite={false}
+          roughness={1}
+        />
+      </mesh>
+    </>
+  )
+}
+
+function Moon({
+  radius,
+  moonRef,
+  segments,
+}: {
+  radius: number
+  moonRef: RefObject<THREE.Group | null>
+  segments: number
+}) {
+  const map = useColorTexture('/textures/1k_moon.webp')
+  return (
+    <group ref={moonRef}>
+      <mesh>
+        <sphereGeometry args={[radius * 0.27, segments, segments]} />
+        {/* The colour map doubles as relief: on an airless world the craters
+            you see are the craters you'd feel. */}
+        <meshStandardMaterial map={map} bumpMap={map} bumpScale={0.02} roughness={1} metalness={0} />
+      </mesh>
+    </group>
+  )
+}
+
+/* ── Rings ───────────────────────────────────────────────────── */
+
+/** Radial-strip UVs: the ring texture is a 1px-tall cross-section. */
+function useRingGeometry(inner: number, outer: number) {
+  return useMemo(() => {
     const g = new THREE.RingGeometry(inner, outer, 128)
     const pos = g.attributes.position
     const uv = g.attributes.uv
@@ -144,23 +225,61 @@ function Ring({
     uv.needsUpdate = true
     return g
   }, [inner, outer])
-  return (
-    <mesh geometry={geom} rotation={[-Math.PI / 2, 0, 0]}>
-      <meshStandardMaterial
-        map={texture}
-        side={THREE.DoubleSide}
-        transparent
-        depthWrite={false}
-        roughness={0.9}
-        opacity={opacity}
-      />
-    </mesh>
-  )
 }
 
-/** Procedural faint banded ring (Uranus) — soft transparent edges. */
-function useUranusRingTexture() {
-  return useMemo(() => {
+/**
+ * Saturn's rings, shadowed by the planet — and shadowing it back. The ring
+ * texture is shared with the planet's material through `ringU` so the band it
+ * casts across the clouds has the ring's own gaps in it.
+ */
+function SaturnRing({ radius, ringU }: { radius: number; ringU: RingShadowUniforms }) {
+  const inner = radius * 1.35
+  const outer = radius * 2.3
+  const tex = useColorTexture('/textures/2k_saturn_ring_alpha.webp')
+  const geom = useRingGeometry(inner, outer)
+  const mesh = useRef<THREE.Mesh>(null)
+
+  const material = useMemo(() => {
+    const m = new THREE.MeshStandardMaterial({
+      map: tex,
+      side: THREE.DoubleSide,
+      transparent: true,
+      depthWrite: false,
+      roughness: 0.9,
+    })
+    applyPlanetShadowOnRing(m, ringU)
+    return m
+  }, [tex, ringU])
+
+  useLayoutEffect(() => {
+    /* eslint-disable react-hooks/immutability */
+    ringU.uRingTex.value = tex
+    ringU.uRingInner.value = inner
+    ringU.uRingOuter.value = outer
+    /* eslint-enable react-hooks/immutability */
+  }, [ringU, tex, inner, outer])
+
+  const normal = useMemo(() => new THREE.Vector3(), [])
+  const quat = useMemo(() => new THREE.Quaternion(), [])
+
+  useFrame(() => {
+    if (!mesh.current) return
+    // The ring plane tilts with the planet; read its live world orientation
+    // rather than re-deriving it from the tilt angle.
+    mesh.current.getWorldQuaternion(quat)
+    ringU.uRingNormal.value.copy(normal.set(0, 0, 1).applyQuaternion(quat)).normalize()
+  })
+
+  return <mesh ref={mesh} geometry={geom} material={material} rotation={[-Math.PI / 2, 0, 0]} />
+}
+
+/** Uranus: faint, procedurally banded, nearly edge-on. */
+function ThinRing({ radius }: { radius: number }) {
+  const inner = radius * 1.5
+  const outer = radius * 2.05
+  const geom = useRingGeometry(inner, outer)
+
+  const tex = useMemo(() => {
     const w = 256
     const c = document.createElement('canvas')
     c.width = w
@@ -180,45 +299,94 @@ function useUranusRingTexture() {
     t.colorSpace = THREE.SRGBColorSpace
     return t
   }, [])
+
+  return (
+    <mesh geometry={geom} rotation={[-Math.PI / 2, 0, 0]}>
+      <meshStandardMaterial
+        map={tex}
+        side={THREE.DoubleSide}
+        transparent
+        depthWrite={false}
+        roughness={0.9}
+      />
+    </mesh>
+  )
 }
 
 /* ── A single body, parked on the curve at its section fraction ── */
+
 function CelestialBody({
   data,
   curve,
   anchors,
+  sunPos,
+  positions,
+  quality,
+  reducedMotion,
 }: {
   data: Body
   curve: THREE.CatmullRomCurve3
   anchors: RefObject<Anchors>
+  sunPos: RefObject<THREE.Vector3>
+  positions: RefObject<PlanetPositions>
+  quality: Quality
+  reducedMotion: boolean
 }) {
+  const { camera } = useThree()
   const root = useRef<THREE.Group>(null)
   const spin = useRef<THREE.Group>(null)
   const clouds = useRef<THREE.Mesh>(null)
   const moon = useRef<THREE.Group>(null)
-  const map = useColorTexture(data.tex)
-  const cloudMap = useColorTexture('/textures/2k_earth_clouds.jpg')
-  const moonMap = useColorTexture('/textures/2k_moon.jpg')
-  const saturnRingTex = useColorTexture('/textures/2k_saturn_ring_alpha.png')
-  const uranusRingTex = useUranusRingTexture()
-  const isSun = data.key === 'sun'
+
+  // Where the sun sits from *this* body's point of view. Each planet is parked
+  // somewhere else along a 300-unit flight path, so there is no single global
+  // light direction to share.
+  const sunU: SunUniforms = useMemo(
+    () => ({ uSunViewDir: { value: new THREE.Vector3(0, 0, 1) } }),
+    []
+  )
+
+  const ringU: RingShadowUniforms = useMemo(
+    () => ({
+      uSunPos: { value: new THREE.Vector3() },
+      uPlanetCenter: { value: new THREE.Vector3() },
+      uPlanetRadius: { value: data.radius },
+      uRingNormal: { value: new THREE.Vector3(0, 1, 0) },
+      uRingInner: { value: 1 },
+      uRingOuter: { value: 2 },
+      uRingTex: { value: null },
+    }),
+    [data.radius]
+  )
 
   const tmp = useMemo(() => new THREE.Vector3(), [])
+  const toSun = useMemo(() => new THREE.Vector3(), [])
+  // Published so the picker can hit-test against this body without walking the
+  // scene graph.
+  const worldPos = useMemo(() => new THREE.Vector3(), [])
 
   useFrame((state, delta) => {
     const f = THREE.MathUtils.clamp(fracOf(data.anchor, anchors.current), 0, 1)
     curve.getPointAt(f, tmp)
-    if (root.current) {
-      root.current.position.set(
-        tmp.x + data.offset[0],
-        tmp.y + data.offset[1],
-        tmp.z + data.offset[2]
-      )
-    }
-    if (spin.current) spin.current.rotation.y += delta * data.spin
-    if (clouds.current) clouds.current.rotation.y += delta * data.spin * 1.4
+    tmp.set(tmp.x + data.offset[0], tmp.y + data.offset[1], tmp.z + data.offset[2])
+    if (root.current) root.current.position.copy(tmp)
+    positions.current.set(data.key, worldPos.copy(tmp))
+
+    // View-space sun direction for the terminator and the atmosphere rim.
+    toSun.copy(sunPos.current).sub(tmp).normalize()
+    sunU.uSunViewDir.value.copy(toSun).transformDirection(camera.matrixWorldInverse)
+
+    ringU.uSunPos.value.copy(sunPos.current)
+    ringU.uPlanetCenter.value.copy(tmp)
+
+    // Spin and the moon's orbit are the only motion here nobody asked for —
+    // they're what "reduce motion" is actually about. Freeze them, but still
+    // park the moon in its orbit rather than leaving it inside the planet.
+    const step = reducedMotion ? 0 : delta
+    if (spin.current) spin.current.rotation.y += step * data.spin
+    if (clouds.current) clouds.current.rotation.y += step * data.spin * 1.4
     if (moon.current) {
-      const a = state.clock.elapsedTime * 0.35
+      const a = reducedMotion ? 0.9 : state.clock.elapsedTime * 0.35
       const r = data.radius * 2.7
       moon.current.position.set(Math.cos(a) * r, Math.sin(a) * 0.35 * r, Math.sin(a) * r)
       moon.current.rotation.y = -a // tidally locked
@@ -229,66 +397,71 @@ function CelestialBody({
     <group ref={root}>
       <group rotation={[0, 0, data.tilt]}>
         <group ref={spin}>
-          <mesh frustumCulled={!isSun}>
-            <sphereGeometry args={[data.radius, 64, 64]} />
-            {isSun ? (
-              <meshStandardMaterial
-                map={map}
-                emissiveMap={map}
-                emissive="#ffffff"
-                emissiveIntensity={2.6}
-                toneMapped={false}
-              />
-            ) : (
-              <meshStandardMaterial map={map} roughness={1} metalness={0} />
-            )}
-          </mesh>
-          {data.clouds && (
-            <mesh ref={clouds}>
-              <sphereGeometry args={[data.radius * 1.012, 64, 64]} />
-              <meshStandardMaterial
-                alphaMap={cloudMap}
-                color="#ffffff"
-                transparent
-                opacity={0.9}
-                depthWrite={false}
-                roughness={1}
-              />
-            </mesh>
+          {data.earth ? (
+            <EarthSurface
+              data={data}
+              cloudsRef={clouds}
+              sunU={sunU}
+              segments={quality.segments}
+            />
+          ) : (
+            <BasicSurface data={data} ringU={ringU} segments={quality.segments} />
           )}
         </group>
-        {data.ring === 'saturn' && (
-          <Ring
-            inner={data.radius * 1.35}
-            outer={data.radius * 2.3}
-            texture={saturnRingTex}
-          />
-        )}
-        {data.ring === 'thin' && (
-          <Ring
-            inner={data.radius * 1.5}
-            outer={data.radius * 2.05}
-            texture={uranusRingTex}
-            opacity={1}
-          />
-        )}
+        {data.ring === 'saturn' && <SaturnRing radius={data.radius} ringU={ringU} />}
+        {data.ring === 'thin' && <ThinRing radius={data.radius} />}
       </group>
 
-      {isSun && (
-        <>
-          <pointLight intensity={1.05} distance={0} decay={0} color="#fff2dd" />
-          <SunGlow radius={data.radius} />
-        </>
+      {data.atmosphere && (
+        <Atmosphere
+          radius={data.radius}
+          color={data.atmosphere.color}
+          intensity={data.atmosphere.intensity}
+          power={data.atmosphere.power}
+          thickness={data.atmosphere.thickness}
+          sun={sunU}
+        />
       )}
 
       {data.moon && (
-        <group ref={moon}>
-          <mesh>
-            <sphereGeometry args={[data.radius * 0.27, 48, 48]} />
-            <meshStandardMaterial map={moonMap} roughness={1} metalness={0} />
-          </mesh>
-        </group>
+        <Moon radius={data.radius} moonRef={moon} segments={Math.round(quality.segments * 0.75)} />
       )}
+    </group>
+  )
+}
+
+/** The star itself — parked like any other body, but lit from within. */
+function SunBody({
+  sunPos,
+  positions,
+  onSunMesh,
+  segments,
+  reducedMotion,
+}: {
+  sunPos: RefObject<THREE.Vector3>
+  positions: RefObject<PlanetPositions>
+  onSunMesh?: (mesh: THREE.Mesh | null) => void
+  segments: number
+  reducedMotion: boolean
+}) {
+  const root = useRef<THREE.Group>(null)
+  const map = useColorTexture(SUN.tex)
+  const worldPos = useMemo(() => new THREE.Vector3(), [])
+
+  useFrame(() => {
+    if (root.current) root.current.position.copy(sunPos.current)
+    positions.current.set(SUN.key, worldPos.copy(sunPos.current))
+  })
+
+  return (
+    <group ref={root}>
+      <Sun
+        radius={SUN.radius}
+        map={map}
+        onMesh={onSunMesh}
+        segments={segments}
+        animate={!reducedMotion}
+      />
     </group>
   )
 }
@@ -305,7 +478,7 @@ function BodyLabel({
   progress: RefObject<number>
 }) {
   const grp = useRef<THREE.Group>(null)
-  const all = useMemo(() => [SUN, ...BODIES], [])
+  const all = ALL_BODIES
   const [active, setActive] = useState<Body | null>(null)
   const tmp = useMemo(() => new THREE.Vector3(), [])
 
@@ -341,6 +514,8 @@ function BodyLabel({
             <div className="cosmo-label">
               <span className="cosmo-label__name">{active.name}</span>
               <span className="cosmo-label__tag">{active.tag}</span>
+              {/* The planet is clickable, but nothing about a planet says so. */}
+              <span className="cosmo-label__hint">Click to inspect</span>
             </div>
           </Html>
         </Billboard>
@@ -353,38 +528,58 @@ function BodyLabel({
 function AsteroidBelt({
   curve,
   anchors,
+  quality,
+  reducedMotion,
 }: {
   curve: THREE.CatmullRomCurve3
   anchors: RefObject<Anchors>
+  quality: Quality
+  reducedMotion: boolean
 }) {
-  const COUNT = 520
+  const count = quality.asteroids
   const ref = useRef<THREE.InstancedMesh>(null)
-  const rockMap = useColorTexture('/textures/2k_moon.jpg')
-  const seeds = useMemo(
-    () =>
-      Array.from({ length: COUNT }, () => ({
-        t: Math.random(),
-        ang: Math.random() * Math.PI * 2,
-        rad: 6 + Math.random() * 13,
-        y: (Math.random() - 0.5) * 9,
-        s: 0.06 + Math.random() * 0.42,
-        rot: Math.random() * Math.PI,
-      })),
-    []
+  const rockMap = useColorTexture('/textures/1k_moon.webp')
+
+  const seeds = useMemo(() => {
+    const rand = mulberry32(0x5eed)
+    return Array.from({ length: count }, () => ({
+      t: rand(),
+      ang: rand() * Math.PI * 2,
+      rad: 6 + rand() * 13,
+      y: (rand() - 0.5) * 9,
+      s: 0.06 + rand() * 0.42,
+      rot: rand() * Math.PI,
+    }))
+  }, [count])
+
+  // Where each rock sits along the flight path. `getPointAt` walks the curve's
+  // arc-length table on every call, so doing it per rock per frame was ~31k
+  // lookups a second for positions that only move when the page is resized.
+  const bases = useMemo(
+    () => Array.from({ length: count }, () => new THREE.Vector3()),
+    [count]
   )
+  const cached = useRef({ f0: NaN, f1: NaN })
   const dummy = useMemo(() => new THREE.Object3D(), [])
-  const base = useMemo(() => new THREE.Vector3(), [])
 
   useFrame((state) => {
     if (!ref.current) return
     const a = anchors.current
     const f0 = fracOf({ between: ['work', 'services'], t: BELT_RANGE[0] }, a)
     const f1 = fracOf({ between: ['work', 'services'], t: BELT_RANGE[1] }, a)
-    const spin = state.clock.elapsedTime * 0.025
-    for (let i = 0; i < COUNT; i++) {
+
+    if (f0 !== cached.current.f0 || f1 !== cached.current.f1) {
+      cached.current = { f0, f1 }
+      for (let i = 0; i < count; i++) {
+        const f = THREE.MathUtils.clamp(THREE.MathUtils.lerp(f0, f1, seeds[i].t), 0, 1)
+        curve.getPointAt(f, bases[i])
+      }
+    }
+
+    const spin = reducedMotion ? 0 : state.clock.elapsedTime * 0.025
+    for (let i = 0; i < count; i++) {
       const s = seeds[i]
-      const f = THREE.MathUtils.clamp(THREE.MathUtils.lerp(f0, f1, s.t), 0, 1)
-      curve.getPointAt(f, base)
+      const base = bases[i]
       const ang = s.ang + spin
       dummy.position.set(
         base.x + Math.cos(ang) * s.rad,
@@ -400,15 +595,24 @@ function AsteroidBelt({
   })
 
   return (
-    <instancedMesh ref={ref} args={[undefined, undefined, COUNT]}>
+    <instancedMesh ref={ref} args={[undefined, undefined, count]}>
       <icosahedronGeometry args={[1, 1]} />
-      <meshStandardMaterial map={rockMap} color="#9a8e7e" roughness={1} metalness={0.05} flatShading />
+      {/* No bump map here: it costs a derivative (dFdx) per pixel across 520
+          instances, and flat shading already does the faceting these rocks need
+          at the size they appear on screen. */}
+      <meshStandardMaterial
+        map={rockMap}
+        color="#9a8e7e"
+        roughness={1}
+        metalness={0.05}
+        flatShading
+      />
     </instancedMesh>
   )
 }
 
 function MilkyWay() {
-  const tex = useColorTexture('/textures/2k_stars_milky_way.jpg')
+  const tex = useColorTexture('/textures/1k_stars_milky_way.webp')
   return (
     <mesh scale={[-1, 1, 1]}>
       <sphereGeometry args={[480, 48, 48]} />
@@ -425,13 +629,26 @@ function MilkyWay() {
 export function SolarSystem({
   progress,
   anchors,
+  onSunMesh,
+  onSelectPlanet,
+  onDismissPlanet,
+  quality,
+  reducedMotion,
 }: {
   progress: RefObject<number>
   anchors: RefObject<Anchors>
+  onSunMesh?: (mesh: THREE.Mesh | null) => void
+  onSelectPlanet: (key: string) => void
+  onDismissPlanet: () => void
+  quality: Quality
+  reducedMotion: boolean
 }) {
   const { camera } = useThree()
   const smooth = useRef(0)
+  const bank = useRef(0)
   const pointer = useRef({ x: 0, y: 0 })
+  const sunPos = useRef(new THREE.Vector3())
+  const positions = useRef<PlanetPositions>(new Map())
 
   const curve = useMemo(
     () =>
@@ -452,6 +669,8 @@ export function SolarSystem({
   const pos = useMemo(() => new THREE.Vector3(), [])
   const look = useMemo(() => new THREE.Vector3(), [])
 
+  // Negative priority: the camera and the sun's position must be settled before
+  // the bodies read them to build their view-space light directions.
   useFrame((state, delta) => {
     const target = progress.current ?? 0
     smooth.current += (target - smooth.current) * Math.min(1, delta * 3)
@@ -469,19 +688,69 @@ export function SolarSystem({
       pos.z
     )
     camera.lookAt(look.x, look.y, look.z)
-  })
+
+    // Bank into the turns, like a craft rolling into a course change.
+    if (!reducedMotion) {
+      const targetBank = THREE.MathUtils.clamp((look.x - pos.x) * -0.02, -0.22, 0.22)
+      bank.current += (targetBank - bank.current) * Math.min(1, delta * 1.5)
+      camera.rotateZ(bank.current)
+    }
+    camera.updateMatrixWorld()
+
+    // Every body's lighting is measured from here.
+    const f = THREE.MathUtils.clamp(fracOf(SUN.anchor, anchors.current), 0, 1)
+    curve.getPointAt(f, sunPos.current)
+    sunPos.current.set(
+      sunPos.current.x + SUN.offset[0],
+      sunPos.current.y + SUN.offset[1],
+      sunPos.current.z + SUN.offset[2]
+    )
+  }, -1)
 
   return (
     <>
       <ambientLight intensity={0.06} />
       <MilkyWay />
-      <Stars radius={320} depth={150} count={3500} factor={4} saturation={0} fade speed={0.3} />
-      <CelestialBody data={SUN} curve={curve} anchors={anchors} />
+      <Stars
+        radius={320}
+        depth={150}
+        count={quality.stars}
+        factor={4}
+        saturation={0}
+        fade
+        speed={reducedMotion ? 0 : 0.3}
+      />
+      <SunBody
+        sunPos={sunPos}
+        positions={positions}
+        onSunMesh={onSunMesh}
+        segments={quality.sunSegments}
+        reducedMotion={reducedMotion}
+      />
       {BODIES.map((b) => (
-        <CelestialBody key={b.key} data={b} curve={curve} anchors={anchors} />
+        <CelestialBody
+          key={b.key}
+          data={b}
+          curve={curve}
+          anchors={anchors}
+          sunPos={sunPos}
+          positions={positions}
+          quality={quality}
+          reducedMotion={reducedMotion}
+        />
       ))}
-      <AsteroidBelt curve={curve} anchors={anchors} />
+      <AsteroidBelt
+        curve={curve}
+        anchors={anchors}
+        quality={quality}
+        reducedMotion={reducedMotion}
+      />
       <BodyLabel curve={curve} anchors={anchors} progress={progress} />
+      <PlanetPicker
+        positions={positions}
+        onSelect={onSelectPlanet}
+        onDismiss={onDismissPlanet}
+      />
     </>
   )
 }

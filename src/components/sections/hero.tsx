@@ -3,17 +3,34 @@
 import { useEffect, useState } from 'react'
 import { ArrowUpRight, ArrowDown } from 'lucide-react'
 import { SectionReveal } from '@/components/ui/section-reveal'
+import { useSiteEntered } from '@/components/site-entered'
+import { usePrefersReducedMotion } from '@/lib/use-prefers-reduced-motion'
+import { scrollToSection } from '@/lib/scroll-to'
 
 const headingWords = ['We', 'craft', 'digital', 'experiences', 'beyond', 'imagination']
 const marqueeText = 'DESIGN · DEVELOPMENT · MOTION · STRATEGY · BRANDING · '
 
 export function Hero() {
   const [visible, setVisible] = useState(false)
+  const entered = useSiteEntered()
+  const reducedMotion = usePrefersReducedMotion()
 
   useEffect(() => {
+    if (!entered) return
     const t = setTimeout(() => setVisible(true), 100)
     return () => clearTimeout(t)
-  }, [])
+  }, [entered])
+
+  // Reduced motion: everything is already in place, so the word-by-word entrance
+  // has nothing to animate from.
+  const enter = (offset: string, ms: number, delay: number) =>
+    reducedMotion
+      ? { opacity: 1, transform: 'none', transition: 'none' }
+      : {
+          opacity: visible ? 1 : 0,
+          transform: visible ? 'translateY(0)' : `translateY(${offset})`,
+          transition: `opacity ${ms}ms ease-out ${delay}s, transform ${ms}ms ease-out ${delay}s`,
+        }
 
   return (
     <section
@@ -31,14 +48,7 @@ export function Hero() {
 
       <div className="relative z-10 flex flex-col items-center text-center max-w-5xl mx-auto w-full">
         {/* Eyebrow */}
-        <div
-          className="flex items-center gap-3 mb-8"
-          style={{
-            opacity: visible ? 1 : 0,
-            transform: visible ? 'translateY(0)' : 'translateY(16px)',
-            transition: 'opacity 600ms ease-out, transform 600ms ease-out',
-          }}
-        >
+        <div className="flex items-center gap-3 mb-8" style={enter('16px', 600, 0)}>
           <span className="h-px w-8" style={{ background: 'var(--text-muted)' }} />
           <span
             className="font-body text-xs tracking-[0.35em] uppercase"
@@ -52,15 +62,7 @@ export function Hero() {
         {/* Staggered heading */}
         <h1 className="font-heading font-light text-5xl md:text-7xl lg:text-8xl leading-[1.14] tracking-tight flex flex-wrap justify-center gap-x-[0.28em] gap-y-1">
           {headingWords.map((word, i) => (
-            <span
-              key={i}
-              className="inline-block"
-              style={{
-                opacity: visible ? 1 : 0,
-                transform: visible ? 'translateY(0)' : 'translateY(28px)',
-                transition: `opacity 700ms ease-out ${0.15 + i * 0.09}s, transform 700ms ease-out ${0.15 + i * 0.09}s`,
-              }}
-            >
+            <span key={i} className="inline-block" style={enter('28px', 700, 0.15 + i * 0.09)}>
               {word}
             </span>
           ))}
@@ -79,7 +81,10 @@ export function Hero() {
         {/* Buttons */}
         <SectionReveal delay={1}>
           <div className="flex flex-wrap gap-4 mt-12 justify-center">
-            <button className="group flex items-center gap-2 px-8 py-4 bg-white text-black font-body font-medium text-sm tracking-wide uppercase transition-all duration-300 hover:gap-3 hover:bg-gray-100">
+            <button
+              onClick={() => scrollToSection('#work')}
+              className="group flex items-center gap-2 px-8 py-4 bg-white text-black font-body font-medium text-sm tracking-wide uppercase transition-all duration-300 hover:gap-3 hover:bg-gray-100 cursor-pointer"
+            >
               Explore Work
               <ArrowUpRight
                 size={16}
@@ -87,7 +92,8 @@ export function Hero() {
               />
             </button>
             <button
-              className="group flex items-center gap-2 px-8 py-4 font-body font-medium text-sm tracking-wide uppercase transition-all duration-300 hover:gap-3"
+              onClick={() => scrollToSection('#contact')}
+              className="group flex items-center gap-2 px-8 py-4 font-body font-medium text-sm tracking-wide uppercase transition-all duration-300 hover:gap-3 cursor-pointer"
               style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = 'var(--text-primary)'
@@ -111,10 +117,11 @@ export function Hero() {
           bottom-24 keeps a clear gap from the buttons and above the marquee */}
       <div
         className="absolute bottom-24 left-1/2 -translate-x-1/2 z-10 hidden sm:flex flex-col items-center gap-2"
-        style={{
-          opacity: visible ? 1 : 0,
-          transition: 'opacity 800ms ease-out 1.6s',
-        }}
+        style={
+          reducedMotion
+            ? { opacity: 1 }
+            : { opacity: visible ? 1 : 0, transition: 'opacity 800ms ease-out 1.6s' }
+        }
       >
         <span
           className="font-body text-[10px] tracking-[0.3em] uppercase"
@@ -124,7 +131,7 @@ export function Hero() {
         </span>
         <ArrowDown
           size={14}
-          className="animate-bounce"
+          className={reducedMotion ? '' : 'animate-bounce'}
           style={{ color: 'var(--text-muted)' }}
         />
       </div>
